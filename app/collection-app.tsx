@@ -15,9 +15,13 @@ type ModelContext = { registerTool: (tool: { name: string; title: string; descri
 const PAGE_SIZE = 36;
 const keyOf = (set: string, number: string) => `${set}:${number}`;
 
-function CardImage({ card }: { card: CatalogCard }) {
+function CardImage({ card, ownedShowcase }: { card: CatalogCard; ownedShowcase: boolean }) {
   const [broken, setBroken] = useState(false);
-  const [showcase, setShowcase] = useState(false);
+  const [showcase, setShowcase] = useState(ownedShowcase);
+  useEffect(() => {
+    setBroken(false);
+    setShowcase(ownedShowcase);
+  }, [ownedShowcase]);
   return <div className="relative aspect-[2.5/3.5] overflow-hidden rounded-xl bg-[#0b0d13] shadow-[0_16px_35px_rgb(0_0_0/35%)]">
     {broken ? <div className="grid h-full place-items-center text-slate-600"><ImageOff className="size-8" /></div> : <img src={showcase && card.showcaseImage ? card.showcaseImage : card.image} alt={`${card.name}${showcase ? ' – Showcase' : card.subtitle ? ` – ${card.subtitle}` : ''}`} loading="lazy" className="h-full w-full object-contain" onError={() => setBroken(true)} />}
     <span className="absolute bottom-2 left-2 rounded-md bg-black/75 px-1.5 py-1 text-[10px] font-bold tracking-wide text-white backdrop-blur">{card.set} {card.number}</span>
@@ -161,7 +165,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
           const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0, showcase: 0 };
           const total = item.regular + item.foil + item.hyperspace + item.showcase;
           return <article key={card.id} className="rounded-2xl border border-white/8 bg-card p-3 transition hover:-translate-y-0.5 hover:border-amber-300/20">
-            <CardImage card={card} />
+            <CardImage card={card} ownedShowcase={item.showcase > 0} />
             <div className="min-h-[70px] px-1 pt-3"><div className="flex items-start justify-between gap-2"><h3 className="line-clamp-2 text-sm font-bold leading-tight">{card.name}</h3><span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${total ? 'bg-amber-300 text-slate-950' : 'bg-white/6 text-slate-500'}`}>{total}</span></div><p className="mt-1 line-clamp-1 text-xs text-slate-500">{card.subtitle || `${card.type} · ${card.rarity}`}</p></div>
             <div className="mt-2 grid gap-1.5">{(['regular', 'foil', 'hyperspace', ...(card.showcaseImage ? ['showcase' as Variant] : [])] as Variant[]).map((variant) => <div key={variant} className={`flex items-center justify-between rounded-lg px-2 py-1 ${variant === 'showcase' ? 'bg-amber-300/10 ring-1 ring-inset ring-amber-300/15' : 'bg-[#0d1017]'}`}><span className={`text-[10px] font-semibold uppercase tracking-wide ${variant === 'showcase' ? 'text-amber-300' : 'text-slate-500'}`}>{variant === 'regular' ? 'Normal' : variant === 'foil' ? 'Foil' : variant === 'hyperspace' ? 'Hyper' : 'Showcase'}</span><div className="flex items-center"><button aria-label={`${card.name} ${variant} entfernen`} onClick={() => adjust(card, variant, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-white/8 hover:text-white"><Minus className="size-3" /></button><strong className="w-6 text-center text-xs tabular-nums">{item[variant]}</strong><button aria-label={`${card.name} ${variant} hinzufügen`} onClick={() => adjust(card, variant, 1)} className="grid size-7 place-items-center rounded-md bg-white/6 text-slate-300 hover:bg-amber-300 hover:text-slate-950"><Plus className="size-3" /></button></div></div>)}</div>
           </article>;
