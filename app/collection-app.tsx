@@ -9,6 +9,7 @@ type CatalogCard = { id: string; set: string; number: string; name: string; subt
 type Inventory = { id?: number; name: string; subtitle: string; set: string; number: string; rarity: string; color: string; regular: number; foil: number; hyperspace: number; showcase: number };
 type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null };
 type Variant = 'regular' | 'foil' | 'hyperspace' | 'showcase';
+type Language = 'de' | 'en';
 type ModelContext = { registerTool: (tool: { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: Record<string, unknown>) => unknown | Promise<unknown> }, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
 const PAGE_SIZE = 36;
@@ -28,6 +29,8 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const [sets, setSets] = useState<SetInfo[]>([]);
   const [setCode, setSetCode] = useState('');
   const [catalog, setCatalog] = useState<CatalogCard[]>([]);
+  const [language, setLanguage] = useState<Language>('de');
+  const [localizedSetName, setLocalizedSetName] = useState('');
   const [inventory, setInventory] = useState<Record<string, Inventory>>({});
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing'>('all');
@@ -51,8 +54,8 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   useEffect(() => {
     if (!setCode) return;
     setLoading(true); setVisible(PAGE_SIZE);
-    void fetch(`/api/catalog/cards?set=${encodeURIComponent(setCode)}`).then((response) => response.json()).then((data) => setCatalog(data.cards ?? [])).catch(() => setNotice('Karten konnten nicht geladen werden')).finally(() => setLoading(false));
-  }, [setCode]);
+    void fetch(`/api/catalog/cards?set=${encodeURIComponent(setCode)}&lang=${language}`).then((response) => response.json()).then((data) => { setCatalog(data.cards ?? []); setLocalizedSetName(data.setName ?? ''); }).catch(() => setNotice('Karten konnten nicht geladen werden')).finally(() => setLoading(false));
+  }, [language, setCode]);
 
   useEffect(() => {
     if (!user) return;
@@ -73,6 +76,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const ownedCards = Object.values(inventory).filter((card) => card.regular + card.foil + card.hyperspace + card.showcase > 0);
   const copies = ownedCards.reduce((sum, card) => sum + card.regular + card.foil + card.hyperspace + card.showcase, 0);
   const selectedSet = sets.find((set) => set.code === setCode);
+  const selectedSetName = localizedSetName || selectedSet?.name;
 
   async function save(card: Inventory) {
     if (!user) throw new Error('Bitte anmelden');
@@ -146,11 +150,12 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
       <section className="min-w-0">
         <div className="mb-5"><p className="text-sm font-medium text-amber-300">KARTENKATALOG</p><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Alle Star Wars: Unlimited Karten</h1><p className="mt-2 text-sm text-slate-400">Wähle ein Set und trage deine Varianten direkt an der Karte ein.</p></div>
-        <div className="mb-5 grid gap-3 rounded-2xl border border-white/8 bg-card p-3 sm:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="mb-5 grid gap-3 rounded-2xl border border-white/8 bg-card p-3 sm:grid-cols-[minmax(0,1fr)_280px_auto]">
           <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><Input value={query} onChange={(event) => { setQuery(event.target.value); setVisible(PAGE_SIZE); }} placeholder="Name, Nummer, Typ oder Seltenheit …" className="h-11 border-white/8 bg-[#0d1017] pl-9" /></div>
           <select aria-label="Kartenset" value={setCode} onChange={(event) => setSetCode(event.target.value)} className="h-11 rounded-lg border border-white/8 bg-[#0d1017] px-3 text-sm text-slate-200 outline-none focus:border-amber-300/50">{sets.map((set) => <option key={set.code} value={set.code}>{set.code} · {set.name} ({set.cardCount})</option>)}</select>
+          <div className="flex h-11 rounded-lg border border-white/8 bg-[#0d1017] p-1" aria-label="Kartensprache">{(['de', 'en'] as Language[]).map((value) => <button key={value} type="button" aria-pressed={language === value} onClick={() => setLanguage(value)} className={`min-w-12 rounded-md px-3 text-xs font-bold transition ${language === value ? 'bg-amber-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}>{value.toUpperCase()}</button>)}</div>
         </div>
-        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSet?.name ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? 'Katalog wird aktualisiert …' : `${shown.length} Karten gefunden`}</p></div></div>
+        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSetName ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? `${language === 'de' ? 'Deutsche' : 'Englische'} Karten werden geladen …` : `${shown.length} Karten gefunden · ${language === 'de' ? 'Deutsch' : 'Englisch'}`}</p></div></div>
 
         {loading ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{Array.from({ length: 10 }).map((_, index) => <div key={index} className="aspect-[2.5/4.9] animate-pulse rounded-2xl bg-white/5" />)}</div> : <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shown.slice(0, visible).map((card) => {
           const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0, showcase: 0 };
