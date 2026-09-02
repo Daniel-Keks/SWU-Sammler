@@ -67,15 +67,25 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     const controller = new AbortController();
     setLoading(true); setVisible(PAGE_SIZE);
     const codes = setCode === 'ALL' ? sets.map((set) => set.code) : [setCode];
-    void Promise.all(codes.map(async (code) => {
-      const response = await fetch(`/api/catalog/cards?set=${encodeURIComponent(code)}&lang=${language}`, { signal: controller.signal });
-      if (!response.ok) throw new Error('Karten konnten nicht geladen werden');
-      return response.json();
-    })).then((results) => {
+    const loadCatalog = async () => {
+      const results: Array<{ cards?: CatalogCard[]; setName?: string; marketUpdatedAt?: string | null }> = [];
+      let failedSets = 0;
+      for (let index = 0; index < codes.length; index += 6) {
+        const batch = await Promise.allSettled(codes.slice(index, index + 6).map(async (code) => {
+          const response = await fetch(`/api/catalog/cards?set=${encodeURIComponent(code)}&lang=${language}`, { signal: controller.signal });
+          if (!response.ok) throw new Error(`Set ${code} nicht verfügbar`);
+          return response.json();
+        }));
+        if (controller.signal.aborted) return;
+        for (const result of batch) result.status === 'fulfilled' ? results.push(result.value) : failedSets += 1;
+      }
+      if (results.length === 0) throw new Error('Karten konnten nicht geladen werden');
       setCatalog(results.flatMap((data) => data.cards ?? []));
       setLocalizedSetName(setCode === 'ALL' ? 'Alle Sets' : results[0]?.setName ?? '');
       setMarketUpdatedAt(results.find((data) => data.marketUpdatedAt)?.marketUpdatedAt ?? null);
-    }).catch((error) => { if (error instanceof Error && error.name !== 'AbortError') setNotice('Karten konnten nicht geladen werden'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      if (failedSets > 0) setNotice(failedSets === 1 ? '1 derzeit nicht verfügbares Set wurde übersprungen' : `${failedSets} derzeit nicht verfügbare Sets wurden übersprungen`);
+    };
+    void loadCatalog().catch((error) => { if (error instanceof Error && error.name !== 'AbortError') setNotice('Karten konnten nicht geladen werden'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [language, setCode, sets]);
 
