@@ -5,7 +5,8 @@ import { Archive, Download, ImageOff, Layers3, Minus, Plus, Search, Sparkles, Up
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-type CatalogCard = { id: string; set: string; number: string; name: string; subtitle: string; type: string; rarity: string; image: string; backImage: string | null; aspects: string[]; showcaseImage: string | null; showcaseNumber: string | null };
+type MarketPrices = { regular: number | null; foil: number | null; hyperspace: number | null; hyperfoil: number | null; showcase: number | null };
+type CatalogCard = { id: string; set: string; number: string; name: string; subtitle: string; type: string; rarity: string; image: string; backImage: string | null; aspects: string[]; showcaseImage: string | null; showcaseNumber: string | null; prices: MarketPrices };
 type Inventory = { id?: number; name: string; subtitle: string; set: string; number: string; rarity: string; color: string; regular: number; foil: number; hyperspace: number; hyperfoil: number; showcase: number };
 type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null };
 type Variant = 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase';
@@ -15,6 +16,8 @@ type ModelContext = { registerTool: (tool: { name: string; title: string; descri
 const PAGE_SIZE = 36;
 const keyOf = (set: string, number: string) => `${set}:${number}`;
 const inventoryTotal = (card: Pick<Inventory, 'set' | 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase'>) => card.regular + (card.set === 'ASH' ? 0 : card.foil) + card.hyperspace + card.hyperfoil + card.showcase;
+const euro = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+const marketValue = (card: CatalogCard, item: Pick<Inventory, 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase'>) => (Object.keys(card.prices) as Variant[]).reduce((sum, variant) => sum + item[variant] * (card.prices[variant] ?? 0), 0);
 
 function CardImage({ card, ownedShowcase }: { card: CatalogCard; ownedShowcase: boolean }) {
   const [broken, setBroken] = useState(false);
@@ -36,6 +39,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const [catalog, setCatalog] = useState<CatalogCard[]>([]);
   const [language, setLanguage] = useState<Language>('de');
   const [localizedSetName, setLocalizedSetName] = useState('');
+  const [marketUpdatedAt, setMarketUpdatedAt] = useState<string | null>(null);
   const [inventory, setInventory] = useState<Record<string, Inventory>>({});
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing'>('all');
@@ -59,7 +63,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   useEffect(() => {
     if (!setCode) return;
     setLoading(true); setVisible(PAGE_SIZE);
-    void fetch(`/api/catalog/cards?set=${encodeURIComponent(setCode)}&lang=${language}`).then((response) => response.json()).then((data) => { setCatalog(data.cards ?? []); setLocalizedSetName(data.setName ?? ''); }).catch(() => setNotice('Karten konnten nicht geladen werden')).finally(() => setLoading(false));
+    void fetch(`/api/catalog/cards?set=${encodeURIComponent(setCode)}&lang=${language}`).then((response) => response.json()).then((data) => { setCatalog(data.cards ?? []); setLocalizedSetName(data.setName ?? ''); setMarketUpdatedAt(data.marketUpdatedAt ?? null); }).catch(() => setNotice('Karten konnten nicht geladen werden')).finally(() => setLoading(false));
   }, [language, setCode]);
 
   useEffect(() => {
@@ -82,6 +86,10 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const copies = ownedCards.reduce((sum, card) => sum + inventoryTotal(card), 0);
   const selectedSet = sets.find((set) => set.code === setCode);
   const selectedSetName = localizedSetName || selectedSet?.name;
+  const selectedSetValue = catalog.reduce((sum, card) => {
+    const item = inventory[keyOf(card.set, card.number)];
+    return sum + (item ? marketValue(card, item) : 0);
+  }, 0);
 
   async function save(card: Inventory) {
     if (!user) throw new Error('Bitte anmelden');
@@ -149,7 +157,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
     <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:px-8">
       <aside className="space-y-4">
-        <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
+        <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 border-t border-white/8 pt-4"><p className="text-2xl font-bold text-emerald-300">{euro.format(selectedSetValue)}</p><p className="text-xs text-slate-400">Cardmarket-Wert im gewählten Set</p></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
         <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Sammlungsfilter">{[['all', 'Alle Karten'], ['owned', 'In Sammlung'], ['missing', 'Fehlende Karten']].map(([value, label]) => <button key={value} onClick={() => { setFilter(value as typeof filter); setVisible(PAGE_SIZE); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${filter === value ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>{value === 'all' ? <Archive className="size-4" /> : value === 'owned' ? <Sparkles className="size-4" /> : <Layers3 className="size-4" />}{label}</button>)}</nav>
         <p className="px-2 text-[11px] leading-relaxed text-slate-600">Inoffizielles Fanprojekt. Kartendaten: SWU-DB. Kartenbilder © Fantasy Flight Games / Lucasfilm.</p>
       </aside>
@@ -161,16 +169,17 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
           <select aria-label="Kartenset" value={setCode} onChange={(event) => setSetCode(event.target.value)} className="h-11 rounded-lg border border-white/8 bg-[#0d1017] px-3 text-sm text-slate-200 outline-none focus:border-amber-300/50">{sets.map((set) => <option key={set.code} value={set.code}>{set.code} · {set.name} ({set.cardCount})</option>)}</select>
           <div className="flex h-11 rounded-lg border border-white/8 bg-[#0d1017] p-1" aria-label="Kartensprache">{(['de', 'en'] as Language[]).map((value) => <button key={value} type="button" aria-pressed={language === value} onClick={() => setLanguage(value)} className={`min-w-12 rounded-md px-3 text-xs font-bold transition ${language === value ? 'bg-amber-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}>{value.toUpperCase()}</button>)}</div>
         </div>
-        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSetName ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? `${language === 'de' ? 'Deutsche' : 'Englische'} Karten werden geladen …` : `${shown.length} Karten gefunden · ${language === 'de' ? 'Deutsch' : 'Englisch'}`}</p></div></div>
+        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSetName ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? `${language === 'de' ? 'Deutsche' : 'Englische'} Karten werden geladen …` : `${shown.length} Karten gefunden · ${language === 'de' ? 'Deutsch' : 'Englisch'}${marketUpdatedAt ? ` · Cardmarket ${new Date(marketUpdatedAt).toLocaleDateString('de-DE')}` : ''}`}</p></div></div>
 
         {loading ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{Array.from({ length: 10 }).map((_, index) => <div key={index} className="aspect-[2.5/4.9] animate-pulse rounded-2xl bg-white/5" />)}</div> : <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shown.slice(0, visible).map((card) => {
           const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0, hyperfoil: 0, showcase: 0 };
           const total = item.regular + (card.set === 'ASH' ? 0 : item.foil) + item.hyperspace + item.hyperfoil + item.showcase;
           const isPlayset = total >= 3 && !['leader', 'anführer', 'base', 'basis'].some((type) => card.type.toLowerCase().includes(type));
+          const cardValue = marketValue(card, item);
           return <article key={card.id} className={`rounded-2xl border bg-card p-3 transition hover:-translate-y-0.5 ${isPlayset ? 'border-emerald-400/35 shadow-[0_0_24px_rgb(52_211_153/8%)] hover:border-emerald-300/55' : 'border-white/8 hover:border-amber-300/20'}`}>
             <CardImage card={card} ownedShowcase={item.showcase > 0} />
-            <div className="min-h-[70px] px-1 pt-3"><div className="flex items-start justify-between gap-2"><h3 className="line-clamp-2 text-sm font-bold leading-tight">{card.name}</h3><span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isPlayset ? 'bg-emerald-300 text-emerald-950' : total ? 'bg-amber-300 text-slate-950' : 'bg-white/6 text-slate-500'}`}>{total}</span></div>{isPlayset && <p className="mt-1 inline-flex rounded-full bg-emerald-400/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[.12em] text-emerald-300 ring-1 ring-inset ring-emerald-400/20">Playset voll</p>}<p className="mt-1 line-clamp-1 text-xs text-slate-500">{card.subtitle || `${card.type} · ${card.rarity}`}</p></div>
-            <div className="mt-2 grid gap-1.5">{(['regular', ...(card.set === 'ASH' ? [] : ['foil' as Variant]), 'hyperspace', ...(!['leader', 'anführer'].some((type) => card.type.toLowerCase().includes(type)) ? ['hyperfoil' as Variant] : []), ...(card.showcaseImage ? ['showcase' as Variant] : [])] as Variant[]).map((variant) => <div key={variant} className={`flex items-center justify-between rounded-lg px-2 py-1 ${variant === 'showcase' ? 'bg-amber-300/10 ring-1 ring-inset ring-amber-300/15' : 'bg-[#0d1017]'}`}><span className={`text-[10px] font-semibold uppercase tracking-wide ${variant === 'showcase' ? 'text-amber-300' : 'text-slate-500'}`}>{variant === 'regular' ? 'Normal' : variant === 'foil' ? 'Foil' : variant === 'hyperspace' ? 'Hyper' : variant === 'hyperfoil' ? 'Hyperfoil' : 'Showcase'}</span><div className="flex items-center"><button aria-label={`${card.name} ${variant} entfernen`} onClick={() => adjust(card, variant, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-white/8 hover:text-white"><Minus className="size-3" /></button><strong className="w-6 text-center text-xs tabular-nums">{item[variant]}</strong><button aria-label={`${card.name} ${variant} hinzufügen`} onClick={() => adjust(card, variant, 1)} className="grid size-7 place-items-center rounded-md bg-white/6 text-slate-300 hover:bg-amber-300 hover:text-slate-950"><Plus className="size-3" /></button></div></div>)}</div>
+            <div className="min-h-[86px] px-1 pt-3"><div className="flex items-start justify-between gap-2"><h3 className="line-clamp-2 text-sm font-bold leading-tight">{card.name}</h3><span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isPlayset ? 'bg-emerald-300 text-emerald-950' : total ? 'bg-amber-300 text-slate-950' : 'bg-white/6 text-slate-500'}`}>{total}</span></div>{isPlayset && <p className="mt-1 inline-flex rounded-full bg-emerald-400/12 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[.12em] text-emerald-300 ring-1 ring-inset ring-emerald-400/20">Playset voll</p>}<p className="mt-1 line-clamp-1 text-xs text-slate-500">{card.subtitle || `${card.type} · ${card.rarity}`}</p>{cardValue > 0 && <p className="mt-1 text-xs font-bold text-emerald-300">Dein Wert: {euro.format(cardValue)}</p>}</div>
+            <div className="mt-2 grid gap-1.5">{(['regular', ...(card.set === 'ASH' ? [] : ['foil' as Variant]), 'hyperspace', ...(!['leader', 'anführer'].some((type) => card.type.toLowerCase().includes(type)) ? ['hyperfoil' as Variant] : []), ...(card.showcaseImage ? ['showcase' as Variant] : [])] as Variant[]).map((variant) => <div key={variant} className={`flex items-center justify-between rounded-lg px-2 py-1 ${variant === 'showcase' ? 'bg-amber-300/10 ring-1 ring-inset ring-amber-300/15' : 'bg-[#0d1017]'}`}><span className={`text-[10px] font-semibold uppercase tracking-wide ${variant === 'showcase' ? 'text-amber-300' : 'text-slate-500'}`}>{variant === 'regular' ? 'Normal' : variant === 'foil' ? 'Foil' : variant === 'hyperspace' ? 'Hyper' : variant === 'hyperfoil' ? 'Hyperfoil' : 'Showcase'}<small className="ml-1 font-normal normal-case tracking-normal text-slate-600">{card.prices[variant] != null ? euro.format(card.prices[variant]) : '–'}</small></span><div className="flex items-center"><button aria-label={`${card.name} ${variant} entfernen`} onClick={() => adjust(card, variant, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-white/8 hover:text-white"><Minus className="size-3" /></button><strong className="w-6 text-center text-xs tabular-nums">{item[variant]}</strong><button aria-label={`${card.name} ${variant} hinzufügen`} onClick={() => adjust(card, variant, 1)} className="grid size-7 place-items-center rounded-md bg-white/6 text-slate-300 hover:bg-amber-300 hover:text-slate-950"><Plus className="size-3" /></button></div></div>)}</div>
           </article>;
         })}</div>}
         {!loading && shown.length === 0 && <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-slate-400">Keine passende Karte gefunden.</div>}

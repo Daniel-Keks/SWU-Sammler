@@ -1,3 +1,5 @@
+import { emptyMarketPrices, getCardmarketPrices } from '../cardmarket';
+
 type SourceCard = {
   Set: string;
   Number: string;
@@ -71,10 +73,12 @@ export async function GET(request: Request) {
 
   let officialStandard: OfficialCard[] = [];
   let officialShowcases: OfficialCard[] = [];
+  let market = { byName: new Map<string, ReturnType<typeof emptyMarketPrices>>(), updatedAt: null as string | null };
   try {
-    [officialStandard, officialShowcases] = await Promise.all([
+    [officialStandard, officialShowcases, market] = await Promise.all([
       fetchOfficialCards(set, language, 'filters[variantOf][id][$null]'),
       fetchOfficialCards(set, language, 'filters[showcase][$eq]'),
+      getCardmarketPrices(catalogSource),
     ]);
   } catch {
     // SWU-DB remains the fallback when the localized official catalog is temporarily unavailable.
@@ -101,6 +105,7 @@ export async function GET(request: Request) {
     const localized = officialByNumber.get(numberKey);
     const localizedShowcase = officialShowcaseByBaseNumber.get(numberKey);
     const swudbShowcase = swudbShowcaseByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
+    const prices = market.byName.get(`${card.Name}${card.Subtitle ? `, ${card.Subtitle}` : ''}`) ?? emptyMarketPrices();
     return {
       id: `${card.Set}_${card.Number}`,
       set: card.Set,
@@ -114,9 +119,10 @@ export async function GET(request: Request) {
       aspects: card.Aspects ?? [],
       showcaseImage: officialImage(localizedShowcase) ?? swudbShowcase?.FrontArt ?? null,
       showcaseNumber: localizedShowcase ? String(localizedShowcase.attributes.cardNumber) : swudbShowcase?.Number ?? null,
+      prices,
     };
   }).sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
 
   const localizedSetName = officialStandard[0]?.attributes.expansion?.data?.attributes?.name;
-  return Response.json({ cards, set, setName: localizedSetName ?? null, language, count: cards.length, source: officialStandard.length ? 'Star Wars: Unlimited / SWU-DB' : 'SWU-DB' });
+  return Response.json({ cards, set, setName: localizedSetName ?? null, language, count: cards.length, marketUpdatedAt: market.updatedAt, source: officialStandard.length ? 'Star Wars: Unlimited / SWU-DB / Cardmarket' : 'SWU-DB' });
 }
