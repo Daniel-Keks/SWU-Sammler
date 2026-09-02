@@ -1,0 +1,1 @@
+ALTER TABLE `collection_entries` ADD `hyperfoil` integer DEFAULT 0 NOT NULL;
