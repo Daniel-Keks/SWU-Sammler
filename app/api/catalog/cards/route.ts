@@ -22,12 +22,15 @@ export async function GET(request: Request) {
   const source = Array.isArray(payload) ? payload : payload.data ?? [];
   const standardCards = source.filter((card) => card.VariantType === 'Normal' || card.VariantType === 'Standard');
   const catalogSource = standardCards.length ? standardCards : source;
+  const showcaseByName = new Map(source.filter((card) => card.VariantType === 'Showcase').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));
   const preferred = new Map<string, SourceCard>();
   for (const card of catalogSource) {
     const current = preferred.get(card.Number);
     if (!current || card.VariantType === 'Normal' || (current.VariantType !== 'Normal' && card.VariantType === 'Standard')) preferred.set(card.Number, card);
   }
-  const cards = [...preferred.values()].map((card) => ({
+  const cards = [...preferred.values()].map((card) => {
+    const showcase = showcaseByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
+    return ({
     id: `${card.Set}_${card.Number}`,
     set: card.Set,
     number: card.Number,
@@ -38,6 +41,9 @@ export async function GET(request: Request) {
     image: card.FrontArt ?? `https://api.swu-db.com/cards/${card.Set.toLowerCase()}/${card.Number}?format=image`,
     backImage: card.BackArt ?? null,
     aspects: card.Aspects ?? [],
-  })).sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+    showcaseImage: showcase?.FrontArt ?? null,
+    showcaseNumber: showcase?.Number ?? null,
+  });
+  }).sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
   return Response.json({ cards, set, count: cards.length, source: 'SWU-DB' });
 }

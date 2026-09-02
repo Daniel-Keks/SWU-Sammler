@@ -5,10 +5,10 @@ import { Archive, Download, ImageOff, Layers3, Minus, Plus, Search, Sparkles, Up
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-type CatalogCard = { id: string; set: string; number: string; name: string; subtitle: string; type: string; rarity: string; image: string; backImage: string | null; aspects: string[] };
-type Inventory = { id?: number; name: string; subtitle: string; set: string; number: string; rarity: string; color: string; regular: number; foil: number; hyperspace: number };
+type CatalogCard = { id: string; set: string; number: string; name: string; subtitle: string; type: string; rarity: string; image: string; backImage: string | null; aspects: string[]; showcaseImage: string | null; showcaseNumber: string | null };
+type Inventory = { id?: number; name: string; subtitle: string; set: string; number: string; rarity: string; color: string; regular: number; foil: number; hyperspace: number; showcase: number };
 type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null };
-type Variant = 'regular' | 'foil' | 'hyperspace';
+type Variant = 'regular' | 'foil' | 'hyperspace' | 'showcase';
 type ModelContext = { registerTool: (tool: { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: Record<string, unknown>) => unknown | Promise<unknown> }, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
 const PAGE_SIZE = 36;
@@ -16,9 +16,11 @@ const keyOf = (set: string, number: string) => `${set}:${number}`;
 
 function CardImage({ card }: { card: CatalogCard }) {
   const [broken, setBroken] = useState(false);
+  const [showcase, setShowcase] = useState(false);
   return <div className="relative aspect-[2.5/3.5] overflow-hidden rounded-xl bg-[#0b0d13] shadow-[0_16px_35px_rgb(0_0_0/35%)]">
-    {broken ? <div className="grid h-full place-items-center text-slate-600"><ImageOff className="size-8" /></div> : <img src={card.image} alt={`${card.name}${card.subtitle ? ` – ${card.subtitle}` : ''}`} loading="lazy" className="h-full w-full object-contain" onError={() => setBroken(true)} />}
+    {broken ? <div className="grid h-full place-items-center text-slate-600"><ImageOff className="size-8" /></div> : <img src={showcase && card.showcaseImage ? card.showcaseImage : card.image} alt={`${card.name}${showcase ? ' – Showcase' : card.subtitle ? ` – ${card.subtitle}` : ''}`} loading="lazy" className="h-full w-full object-contain" onError={() => setBroken(true)} />}
     <span className="absolute bottom-2 left-2 rounded-md bg-black/75 px-1.5 py-1 text-[10px] font-bold tracking-wide text-white backdrop-blur">{card.set} {card.number}</span>
+    {card.showcaseImage && <button type="button" onClick={() => { setBroken(false); setShowcase((value) => !value); }} className={`absolute right-2 top-2 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide backdrop-blur ${showcase ? 'bg-amber-300 text-slate-950' : 'bg-black/75 text-amber-200'}`}>{showcase ? 'Standard' : 'Showcase'}</button>}
   </div>;
 }
 
@@ -63,13 +65,13 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
   const shown = useMemo(() => catalog.filter((card) => {
     const item = inventory[keyOf(card.set, card.number)];
-    const total = item ? item.regular + item.foil + item.hyperspace : 0;
+    const total = item ? item.regular + item.foil + item.hyperspace + item.showcase : 0;
     const haystack = `${card.name} ${card.subtitle} ${card.set} ${card.number} ${card.type} ${card.rarity}`.toLowerCase();
     return haystack.includes(query.toLowerCase()) && (filter === 'all' || (filter === 'owned' ? total > 0 : total === 0));
   }), [catalog, filter, inventory, query]);
 
-  const ownedCards = Object.values(inventory).filter((card) => card.regular + card.foil + card.hyperspace > 0);
-  const copies = ownedCards.reduce((sum, card) => sum + card.regular + card.foil + card.hyperspace, 0);
+  const ownedCards = Object.values(inventory).filter((card) => card.regular + card.foil + card.hyperspace + card.showcase > 0);
+  const copies = ownedCards.reduce((sum, card) => sum + card.regular + card.foil + card.hyperspace + card.showcase, 0);
   const selectedSet = sets.find((set) => set.code === setCode);
 
   async function save(card: Inventory) {
@@ -82,7 +84,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   function adjust(card: CatalogCard, variant: Variant, amount: number) {
     if (!user) { setNotice('Bitte anmelden, um Bestände zu speichern'); return; }
     const key = keyOf(card.set, card.number);
-    const current = inventoryRef.current[key] ?? { name: card.name, subtitle: card.subtitle, set: card.set, number: card.number, rarity: card.rarity, color: '#d6ad43', regular: 0, foil: 0, hyperspace: 0 };
+    const current = inventoryRef.current[key] ?? { name: card.name, subtitle: card.subtitle, set: card.set, number: card.number, rarity: card.rarity, color: '#d6ad43', regular: 0, foil: 0, hyperspace: 0, showcase: 0 };
     const next = { ...current, [variant]: Math.max(0, current[variant] + amount) };
     setInventory((items) => ({ ...items, [key]: next }));
     void save(next).then((saved) => setInventory((items) => ({ ...items, [key]: saved }))).catch(() => setNotice('Bestand konnte nicht gespeichert werden'));
@@ -111,13 +113,13 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     const lifecycle = new AbortController();
     const registration = context.registerTool({
       name: 'set_collection_card_quantity', title: 'Kartenbestand setzen', description: 'Setzt den Bestand einer SWU-Karte für Normal, Foil oder Hyperspace.',
-      inputSchema: { type: 'object', properties: { name: { type: 'string' }, set: { type: 'string' }, number: { type: 'string' }, variant: { type: 'string', enum: ['regular', 'foil', 'hyperspace'] }, quantity: { type: 'integer', minimum: 0 } }, required: ['name', 'set', 'number', 'variant', 'quantity'], additionalProperties: false },
+      inputSchema: { type: 'object', properties: { name: { type: 'string' }, set: { type: 'string' }, number: { type: 'string' }, variant: { type: 'string', enum: ['regular', 'foil', 'hyperspace', 'showcase'] }, quantity: { type: 'integer', minimum: 0 } }, required: ['name', 'set', 'number', 'variant', 'quantity'], additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       async execute(input) {
         const variant = String(input.variant) as Variant; const quantity = Number(input.quantity);
-        if (!['regular', 'foil', 'hyperspace'].includes(variant) || !Number.isInteger(quantity) || quantity < 0) throw new Error('Ungültiger Bestand');
+        if (!['regular', 'foil', 'hyperspace', 'showcase'].includes(variant) || !Number.isInteger(quantity) || quantity < 0) throw new Error('Ungültiger Bestand');
         const key = keyOf(String(input.set), String(input.number));
-        const current = inventoryRef.current[key] ?? { name: String(input.name), subtitle: '', set: String(input.set), number: String(input.number), rarity: 'Unbekannt', color: '#d6ad43', regular: 0, foil: 0, hyperspace: 0 };
+        const current = inventoryRef.current[key] ?? { name: String(input.name), subtitle: '', set: String(input.set), number: String(input.number), rarity: 'Unbekannt', color: '#d6ad43', regular: 0, foil: 0, hyperspace: 0, showcase: 0 };
         const saved = await save({ ...current, [variant]: quantity });
         setInventory((items) => ({ ...items, [key]: saved }));
         return { name: saved.name, set: saved.set, number: saved.number, variant, quantity };
@@ -151,12 +153,12 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
         <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSet?.name ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? 'Katalog wird aktualisiert …' : `${shown.length} Karten gefunden`}</p></div></div>
 
         {loading ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{Array.from({ length: 10 }).map((_, index) => <div key={index} className="aspect-[2.5/4.9] animate-pulse rounded-2xl bg-white/5" />)}</div> : <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shown.slice(0, visible).map((card) => {
-          const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0 };
-          const total = item.regular + item.foil + item.hyperspace;
+          const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0, showcase: 0 };
+          const total = item.regular + item.foil + item.hyperspace + item.showcase;
           return <article key={card.id} className="rounded-2xl border border-white/8 bg-card p-3 transition hover:-translate-y-0.5 hover:border-amber-300/20">
             <CardImage card={card} />
             <div className="min-h-[70px] px-1 pt-3"><div className="flex items-start justify-between gap-2"><h3 className="line-clamp-2 text-sm font-bold leading-tight">{card.name}</h3><span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${total ? 'bg-amber-300 text-slate-950' : 'bg-white/6 text-slate-500'}`}>{total}</span></div><p className="mt-1 line-clamp-1 text-xs text-slate-500">{card.subtitle || `${card.type} · ${card.rarity}`}</p></div>
-            <div className="mt-2 grid gap-1.5">{(['regular', 'foil', 'hyperspace'] as Variant[]).map((variant) => <div key={variant} className="flex items-center justify-between rounded-lg bg-[#0d1017] px-2 py-1"><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{variant === 'regular' ? 'Normal' : variant === 'foil' ? 'Foil' : 'Hyper'}</span><div className="flex items-center"><button aria-label={`${card.name} ${variant} entfernen`} onClick={() => adjust(card, variant, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-white/8 hover:text-white"><Minus className="size-3" /></button><strong className="w-6 text-center text-xs tabular-nums">{item[variant]}</strong><button aria-label={`${card.name} ${variant} hinzufügen`} onClick={() => adjust(card, variant, 1)} className="grid size-7 place-items-center rounded-md bg-white/6 text-slate-300 hover:bg-amber-300 hover:text-slate-950"><Plus className="size-3" /></button></div></div>)}</div>
+            <div className="mt-2 grid gap-1.5">{(['regular', 'foil', 'hyperspace', ...(card.showcaseImage ? ['showcase' as Variant] : [])] as Variant[]).map((variant) => <div key={variant} className={`flex items-center justify-between rounded-lg px-2 py-1 ${variant === 'showcase' ? 'bg-amber-300/10 ring-1 ring-inset ring-amber-300/15' : 'bg-[#0d1017]'}`}><span className={`text-[10px] font-semibold uppercase tracking-wide ${variant === 'showcase' ? 'text-amber-300' : 'text-slate-500'}`}>{variant === 'regular' ? 'Normal' : variant === 'foil' ? 'Foil' : variant === 'hyperspace' ? 'Hyper' : 'Showcase'}</span><div className="flex items-center"><button aria-label={`${card.name} ${variant} entfernen`} onClick={() => adjust(card, variant, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-white/8 hover:text-white"><Minus className="size-3" /></button><strong className="w-6 text-center text-xs tabular-nums">{item[variant]}</strong><button aria-label={`${card.name} ${variant} hinzufügen`} onClick={() => adjust(card, variant, 1)} className="grid size-7 place-items-center rounded-md bg-white/6 text-slate-300 hover:bg-amber-300 hover:text-slate-950"><Plus className="size-3" /></button></div></div>)}</div>
           </article>;
         })}</div>}
         {!loading && shown.length === 0 && <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-slate-400">Keine passende Karte gefunden.</div>}

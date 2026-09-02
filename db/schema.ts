@@ -12,6 +12,7 @@ export const collectionEntries = sqliteTable('collection_entries', {
   regular: integer('regular').notNull().default(0),
   foil: integer('foil').notNull().default(0),
   hyperspace: integer('hyperspace').notNull().default(0),
+  showcase: integer('showcase').notNull().default(0),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
   uniqueIndex('idx_collection_user_set_number').on(table.userId, table.setName, table.cardNumber),
