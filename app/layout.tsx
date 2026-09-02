@@ -13,16 +13,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Holocron – SWU Collection Tracker',
+  title: 'SWU Sammler – Collection Tracker',
   description: 'Star Wars: Unlimited Sammlung schnell und übersichtlich verwalten.',
   openGraph: {
-    title: 'Holocron – SWU Collection Tracker',
+    title: 'SWU Sammler – Collection Tracker',
     description: 'Deine Star Wars: Unlimited Sammlung im Griff.',
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'Holocron – SWU Collection Tracker' }],
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: 'SWU Sammler – Collection Tracker' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Holocron – SWU Collection Tracker',
+    title: 'SWU Sammler – Collection Tracker',
     description: 'Deine Star Wars: Unlimited Sammlung im Griff.',
     images: ['/og.png'],
   },

@@ -89,7 +89,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
   function exportCollection() {
     const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'holocron-sammlung.json'; link.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'swu-sammler-sammlung.json'; link.click(); URL.revokeObjectURL(url);
   }
 
   async function importCollection(file?: File) {
@@ -100,7 +100,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   return <main className="min-h-screen bg-background text-foreground">
     <header className="border-b border-white/8 bg-[#090b10]/92 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-4 lg:px-8">
-        <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><Layers3 /></div><div><p className="text-lg font-bold tracking-tight">Holocron</p><p className="text-xs text-slate-400">SWU Collection Tracker</p></div></div>
+        <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><Layers3 /></div><div><p className="text-lg font-bold tracking-tight">SWU Sammler</p><p className="text-xs text-slate-400">Collection Tracker</p></div></div>
         <div className="flex items-center gap-2"><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => void importCollection(event.target.files?.[0])} /><Button variant="ghost" onClick={exportCollection} className="hidden text-slate-300 sm:flex"><Download /> Export</Button><Button variant="outline" onClick={() => fileRef.current?.click()} className="hidden border-white/10 bg-white/5 text-slate-200 sm:flex"><Upload /> Import</Button>{user ? <div className="grid size-9 place-items-center rounded-full bg-amber-300 font-bold text-slate-950" title={user.email}>{user.name.charAt(0).toUpperCase()}</div> : <a href="/signin-with-chatgpt?return_to=%2F" target="_top" className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">Anmelden</a>}</div>
       </div>
     </header>
