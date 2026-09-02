@@ -1,0 +1,1 @@
+ALTER TABLE `collection_entries` ADD `showcase` integer DEFAULT 0 NOT NULL;
