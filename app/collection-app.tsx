@@ -63,9 +63,21 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
   useEffect(() => {
     if (!setCode) return;
+    if (setCode === 'ALL' && sets.length === 0) return;
+    const controller = new AbortController();
     setLoading(true); setVisible(PAGE_SIZE);
-    void fetch(`/api/catalog/cards?set=${encodeURIComponent(setCode)}&lang=${language}`).then((response) => response.json()).then((data) => { setCatalog(data.cards ?? []); setLocalizedSetName(data.setName ?? ''); setMarketUpdatedAt(data.marketUpdatedAt ?? null); }).catch(() => setNotice('Karten konnten nicht geladen werden')).finally(() => setLoading(false));
-  }, [language, setCode]);
+    const codes = setCode === 'ALL' ? sets.map((set) => set.code) : [setCode];
+    void Promise.all(codes.map(async (code) => {
+      const response = await fetch(`/api/catalog/cards?set=${encodeURIComponent(code)}&lang=${language}`, { signal: controller.signal });
+      if (!response.ok) throw new Error('Karten konnten nicht geladen werden');
+      return response.json();
+    })).then((results) => {
+      setCatalog(results.flatMap((data) => data.cards ?? []));
+      setLocalizedSetName(setCode === 'ALL' ? 'Alle Sets' : results[0]?.setName ?? '');
+      setMarketUpdatedAt(results.find((data) => data.marketUpdatedAt)?.marketUpdatedAt ?? null);
+    }).catch((error) => { if (error instanceof Error && error.name !== 'AbortError') setNotice('Karten konnten nicht geladen werden'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [language, setCode, sets]);
 
   useEffect(() => {
     if (!user) return;
@@ -90,7 +102,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const ownedCards = Object.values(inventory).filter((card) => inventoryTotal(card) > 0);
   const copies = ownedCards.reduce((sum, card) => sum + inventoryTotal(card), 0);
   const selectedSet = sets.find((set) => set.code === setCode);
-  const selectedSetName = localizedSetName || selectedSet?.name;
+  const selectedSetName = setCode === 'ALL' ? 'Alle Sets' : localizedSetName || selectedSet?.name;
   const selectedSetValue = catalog.reduce((sum, card) => {
     const item = inventory[keyOf(card.set, card.number)];
     return sum + (item ? marketValue(card, item) : 0);
@@ -162,7 +174,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
 
     <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:px-8">
       <aside className="space-y-4">
-        <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 border-t border-white/8 pt-4"><p className="text-2xl font-bold text-emerald-300">{euro.format(selectedSetValue)}</p><p className="text-xs text-slate-400">Cardmarket-Wert im gewählten Set</p></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
+        <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 border-t border-white/8 pt-4"><p className="text-2xl font-bold text-emerald-300">{euro.format(selectedSetValue)}</p><p className="text-xs text-slate-400">{setCode === 'ALL' ? 'Cardmarket-Wert der gesamten Sammlung' : 'Cardmarket-Wert im gewählten Set'}</p></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
         <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Sammlungsfilter">{([['all', 'Alle Karten'], ['valuable', 'Meine wertvollsten'], ['owned', 'In Sammlung'], ['missing', 'Fehlende Karten']] as [CatalogFilter, string][]).map(([value, label]) => <button key={value} onClick={() => { setFilter(value); setVisible(PAGE_SIZE); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${filter === value ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>{value === 'all' ? <Archive className="size-4" /> : value === 'valuable' ? <Trophy className="size-4" /> : value === 'owned' ? <Sparkles className="size-4" /> : <Layers3 className="size-4" />}{label}</button>)}</nav>
         <p className="px-2 text-[11px] leading-relaxed text-slate-600">Inoffizielles Fanprojekt. Kartendaten: SWU-DB. Kartenbilder © Fantasy Flight Games / Lucasfilm.</p>
       </aside>
@@ -171,10 +183,10 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
         <div className="mb-5"><p className="text-sm font-medium text-amber-300">KARTENKATALOG</p><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Alle Star Wars: Unlimited Karten</h1><p className="mt-2 text-sm text-slate-400">Wähle ein Set und trage deine Varianten direkt an der Karte ein.</p></div>
         <div className="mb-5 grid gap-3 rounded-2xl border border-white/8 bg-card p-3 sm:grid-cols-[minmax(0,1fr)_280px_auto]">
           <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><Input value={query} onChange={(event) => { setQuery(event.target.value); setVisible(PAGE_SIZE); }} placeholder="Name, Nummer, Typ oder Seltenheit …" className="h-11 border-white/8 bg-[#0d1017] pl-9" /></div>
-          <select aria-label="Kartenset" value={setCode} onChange={(event) => setSetCode(event.target.value)} className="h-11 rounded-lg border border-white/8 bg-[#0d1017] px-3 text-sm text-slate-200 outline-none focus:border-amber-300/50">{sets.map((set) => <option key={set.code} value={set.code}>{set.code} · {set.name} ({set.cardCount})</option>)}</select>
+          <select aria-label="Kartenset" value={setCode} onChange={(event) => setSetCode(event.target.value)} className="h-11 rounded-lg border border-white/8 bg-[#0d1017] px-3 text-sm text-slate-200 outline-none focus:border-amber-300/50"><option value="ALL">Alle Sets · gesamter Katalog ({catalogTotal})</option>{sets.map((set) => <option key={set.code} value={set.code}>{set.code} · {set.name} ({set.cardCount})</option>)}</select>
           <div className="flex h-11 rounded-lg border border-white/8 bg-[#0d1017] p-1" aria-label="Kartensprache">{(['de', 'en'] as Language[]).map((value) => <button key={value} type="button" aria-pressed={language === value} onClick={() => setLanguage(value)} className={`min-w-12 rounded-md px-3 text-xs font-bold transition ${language === value ? 'bg-amber-300 text-slate-950' : 'text-slate-400 hover:text-white'}`}>{value.toUpperCase()}</button>)}</div>
         </div>
-        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSetName ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? `${language === 'de' ? 'Deutsche' : 'Englische'} Karten werden geladen …` : `${shown.length} Karten gefunden · ${language === 'de' ? 'Deutsch' : 'Englisch'}${marketUpdatedAt ? ` · Cardmarket ${new Date(marketUpdatedAt).toLocaleDateString('de-DE')}` : ''}`}</p></div></div>
+        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">{selectedSetName ?? 'Karten werden geladen'}</h2><p className="text-xs text-slate-500">{loading ? `${setCode === 'ALL' ? 'Alle Sets' : language === 'de' ? 'Deutsche Karten' : 'Englische Karten'} werden geladen …` : `${shown.length} Karten gefunden · ${language === 'de' ? 'Deutsch' : 'Englisch'}${marketUpdatedAt ? ` · Cardmarket ${new Date(marketUpdatedAt).toLocaleDateString('de-DE')}` : ''}`}</p></div></div>
 
         {loading ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{Array.from({ length: 10 }).map((_, index) => <div key={index} className="aspect-[2.5/4.9] animate-pulse rounded-2xl bg-white/5" />)}</div> : <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">{shown.slice(0, visible).map((card) => {
           const item = inventory[keyOf(card.set, card.number)] ?? { regular: 0, foil: 0, hyperspace: 0, hyperfoil: 0, showcase: 0 };
