@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Download, ImageOff, Layers3, Minus, Plus, Search, Sparkles, Upload } from 'lucide-react';
+import { Archive, Download, ImageOff, Layers3, Minus, Plus, Search, Sparkles, Trophy, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -11,6 +11,7 @@ type Inventory = { id?: number; name: string; subtitle: string; set: string; num
 type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null };
 type Variant = 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase';
 type Language = 'de' | 'en';
+type CatalogFilter = 'all' | 'owned' | 'missing' | 'valuable';
 type ModelContext = { registerTool: (tool: { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: Record<string, unknown>) => unknown | Promise<unknown> }, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
 const PAGE_SIZE = 36;
@@ -18,6 +19,7 @@ const keyOf = (set: string, number: string) => `${set}:${number}`;
 const inventoryTotal = (card: Pick<Inventory, 'set' | 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase'>) => card.regular + (card.set === 'ASH' ? 0 : card.foil) + card.hyperspace + card.hyperfoil + card.showcase;
 const euro = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const marketValue = (card: CatalogCard, item: Pick<Inventory, 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase'>) => (Object.keys(card.prices) as Variant[]).reduce((sum, variant) => sum + item[variant] * (card.prices[variant] ?? 0), 0);
+const highestTrend = (card: CatalogCard) => Math.max(0, ...Object.values(card.prices).map((price) => price ?? 0));
 
 function CardImage({ card, ownedShowcase }: { card: CatalogCard; ownedShowcase: boolean }) {
   const [broken, setBroken] = useState(false);
@@ -42,7 +44,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const [marketUpdatedAt, setMarketUpdatedAt] = useState<string | null>(null);
   const [inventory, setInventory] = useState<Record<string, Inventory>>({});
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'owned' | 'missing'>('all');
+  const [filter, setFilter] = useState<CatalogFilter>('all');
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -75,12 +77,15 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     });
   }, [user]);
 
-  const shown = useMemo(() => catalog.filter((card) => {
+  const shown = useMemo(() => {
+    const matches = catalog.filter((card) => {
     const item = inventory[keyOf(card.set, card.number)];
     const total = item ? inventoryTotal(item) : 0;
     const haystack = `${card.name} ${card.subtitle} ${card.set} ${card.number} ${card.type} ${card.rarity}`.toLowerCase();
-    return haystack.includes(query.toLowerCase()) && (filter === 'all' || (filter === 'owned' ? total > 0 : total === 0));
-  }), [catalog, filter, inventory, query]);
+    return haystack.includes(query.toLowerCase()) && (filter === 'all' || filter === 'valuable' ? filter !== 'valuable' || highestTrend(card) > 0 : filter === 'owned' ? total > 0 : total === 0);
+    });
+    return filter === 'valuable' ? matches.sort((a, b) => highestTrend(b) - highestTrend(a)).slice(0, 50) : matches;
+  }, [catalog, filter, inventory, query]);
 
   const ownedCards = Object.values(inventory).filter((card) => inventoryTotal(card) > 0);
   const copies = ownedCards.reduce((sum, card) => sum + inventoryTotal(card), 0);
@@ -158,7 +163,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     <div className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:px-8">
       <aside className="space-y-4">
         <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 border-t border-white/8 pt-4"><p className="text-2xl font-bold text-emerald-300">{euro.format(selectedSetValue)}</p><p className="text-xs text-slate-400">Cardmarket-Wert im gewählten Set</p></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
-        <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Sammlungsfilter">{[['all', 'Alle Karten'], ['owned', 'In Sammlung'], ['missing', 'Fehlende Karten']].map(([value, label]) => <button key={value} onClick={() => { setFilter(value as typeof filter); setVisible(PAGE_SIZE); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${filter === value ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>{value === 'all' ? <Archive className="size-4" /> : value === 'owned' ? <Sparkles className="size-4" /> : <Layers3 className="size-4" />}{label}</button>)}</nav>
+        <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Sammlungsfilter">{([['all', 'Alle Karten'], ['valuable', 'Wertvollste Karten'], ['owned', 'In Sammlung'], ['missing', 'Fehlende Karten']] as [CatalogFilter, string][]).map(([value, label]) => <button key={value} onClick={() => { setFilter(value); setVisible(PAGE_SIZE); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${filter === value ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>{value === 'all' ? <Archive className="size-4" /> : value === 'valuable' ? <Trophy className="size-4" /> : value === 'owned' ? <Sparkles className="size-4" /> : <Layers3 className="size-4" />}{label}</button>)}</nav>
         <p className="px-2 text-[11px] leading-relaxed text-slate-600">Inoffizielles Fanprojekt. Kartendaten: SWU-DB. Kartenbilder © Fantasy Flight Games / Lucasfilm.</p>
       </aside>
 
