@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, Download, ExternalLink, ImageOff, Layers3, Link2, Minus, Plus, Search, Sparkles, Trophy, Upload, X } from 'lucide-react';
+import { Archive, Check, Copy, Download, ExternalLink, ImageOff, Layers3, Link2, Minus, Plus, Save, Search, Sparkles, Trash2, Trophy, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -14,7 +14,7 @@ type Language = 'de' | 'en';
 type CatalogFilter = 'all' | 'owned' | 'missing' | 'valuable';
 type AppView = 'collection' | 'decks';
 type DeckLine = { set: string; number: string; name: string; count: number; board: 'leader' | 'base' | 'main' | 'sideboard' };
-type ImportedDeck = { source: 'SWUDB' | 'SWUBase'; name: string; cards: DeckLine[] };
+type ImportedDeck = { id?: string; publicSlug?: string; source: 'SWUDB' | 'SWUBase' | 'SWU Sammler'; sourceUrl?: string; name: string; cards: DeckLine[] };
 type ModelContext = { registerTool: (tool: { name: string; title: string; description: string; inputSchema: object; annotations: { readOnlyHint: boolean; untrustedContentHint: boolean }; execute: (input: Record<string, unknown>) => unknown | Promise<unknown> }, options?: { signal?: AbortSignal }) => void | Promise<void> };
 
 const PAGE_SIZE = 36;
@@ -37,14 +37,18 @@ function CardImage({ card, ownedShowcase }: { card: CatalogCard; ownedShowcase: 
   </div>;
 }
 
-function DeckChecker({ user, deckUrl, setDeckUrl, deck, loading, inventory, onImport }: {
+function DeckChecker({ user, deckUrl, setDeckUrl, deck, setDeck, savedDecks, loading, inventory, onImport, onSave, onDelete }: {
   user: { name: string; email: string } | null;
   deckUrl: string;
   setDeckUrl: (value: string) => void;
   deck: ImportedDeck | null;
+  setDeck: (deck: ImportedDeck | null) => void;
+  savedDecks: ImportedDeck[];
   loading: boolean;
   inventory: Record<string, Inventory>;
   onImport: () => void;
+  onSave: () => void;
+  onDelete: (id: string) => void;
 }) {
   const compared = useMemo(() => {
     if (!deck) return [];
@@ -65,22 +69,24 @@ function DeckChecker({ user, deckUrl, setDeckUrl, deck, loading, inventory, onIm
   const complete = deck != null && missingCopies === 0;
 
   return <section className="min-w-0">
-    <div className="mb-5"><p className="text-sm font-medium text-amber-300">DECK-CHECK</p><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Kann ich dieses Deck bauen?</h1><p className="mt-2 text-sm text-slate-400">Füge einen öffentlichen Decklink von SWUDB oder SWUBase ein. Alle Varianten einer Karte zählen gemeinsam.</p></div>
+    <div className="mb-5"><p className="text-sm font-medium text-amber-300">MEINE DECKS</p><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Decks importieren und bearbeiten</h1><p className="mt-2 text-sm text-slate-400">Importiere ein Deck, gleiche es mit deiner Sammlung ab und speichere deine eigene Version.</p></div>
     <form onSubmit={(event) => { event.preventDefault(); onImport(); }} className="grid gap-3 rounded-2xl border border-white/8 bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
       <div className="relative"><Link2 className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><Input type="url" required value={deckUrl} onChange={(event) => setDeckUrl(event.target.value)} placeholder="https://swudb.com/deck/… oder https://swubase.com/decks/…" className="h-12 border-white/8 bg-[#0d1017] pl-9" /></div>
       <Button type="submit" disabled={loading} className="h-12 bg-amber-300 px-6 font-bold text-slate-950 hover:bg-amber-200">{loading ? 'Deck wird geladen …' : 'Deck prüfen'}</Button>
     </form>
 
+    {savedDecks.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{savedDecks.map((item) => <button key={item.id} onClick={() => setDeck(item)} className={`rounded-xl border px-3 py-2 text-sm ${deck?.id === item.id ? 'border-amber-300/40 bg-amber-300/10 text-amber-200' : 'border-white/8 bg-card text-slate-300'}`}>{item.name}</button>)}</div>}
+
     {!user && <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-300/8 p-5 text-sm text-amber-100">Melde dich an, damit das Deck mit deinem gespeicherten Kartenbestand verglichen werden kann.</div>}
 
     {deck && <div className="mt-6 space-y-5">
       <div className={`rounded-2xl border p-5 ${complete ? 'border-emerald-400/30 bg-emerald-400/8' : 'border-amber-300/20 bg-card'}`}>
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><span className="rounded-full bg-white/8 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">{deck.source}</span><h2 className="text-xl font-bold">{deck.name}</h2></div><p className="mt-2 text-sm text-slate-400">{compared.length} verschiedene Karten · {requiredCopies} Karten insgesamt</p></div><div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${complete ? 'bg-emerald-300 text-emerald-950' : 'bg-amber-300 text-slate-950'}`}>{complete ? <Check className="size-6" /> : <X className="size-6" />}<div><p className="font-bold">{complete ? 'Deck vollständig' : `${missingCopies} Karten fehlen`}</p><p className="text-xs opacity-75">{complete ? 'Du besitzt alle benötigten Karten.' : `${compared.filter((card) => card.missing > 0).length} verschiedene Karten`}</p></div></div></div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><span className="rounded-full bg-white/8 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">{deck.source}</span><Input aria-label="Deckname" value={deck.name} onChange={(event) => setDeck({ ...deck, name: event.target.value })} className="h-9 max-w-sm border-white/8 bg-[#0d1017] text-lg font-bold" /></div><p className="mt-2 text-sm text-slate-400">{compared.length} verschiedene Karten · {requiredCopies} Karten insgesamt</p><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={onSave} disabled={!user}><Save />Deck speichern</Button><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(JSON.stringify({ metadata: { name: deck.name }, leader: deck.cards.find(c => c.board === 'leader') ? { id: `${deck.cards.find(c => c.board === 'leader')!.set}_${deck.cards.find(c => c.board === 'leader')!.number}`, count: 1 } : null, base: deck.cards.find(c => c.board === 'base') ? { id: `${deck.cards.find(c => c.board === 'base')!.set}_${deck.cards.find(c => c.board === 'base')!.number}`, count: 1 } : null, deck: deck.cards.filter(c => c.board === 'main').map(c => ({ id: `${c.set}_${c.number}`, count: c.count })), sideboard: deck.cards.filter(c => c.board === 'sideboard').map(c => ({ id: `${c.set}_${c.number}`, count: c.count })) }))}><Copy />Für Karabast kopieren</Button>{deck.publicSlug && <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(`${location.origin}/api/decks/public/${deck.publicSlug}`)}><Link2 />Öffentlichen Link kopieren</Button>}{deck.id && <Button size="sm" variant="ghost" onClick={() => onDelete(deck.id!)} className="text-rose-300"><Trash2 />Löschen</Button>}</div></div><div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${complete ? 'bg-emerald-300 text-emerald-950' : 'bg-amber-300 text-slate-950'}`}>{complete ? <Check className="size-6" /> : <X className="size-6" />}<div><p className="font-bold">{complete ? 'Deck vollständig' : `${missingCopies} Karten fehlen`}</p><p className="text-xs opacity-75">{complete ? 'Du besitzt alle benötigten Karten.' : `${compared.filter((card) => card.missing > 0).length} verschiedene Karten`}</p></div></div></div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-white/8 bg-card">
         <div className="grid grid-cols-[minmax(0,1fr)_64px_64px_64px] gap-2 border-b border-white/8 bg-white/[.025] px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500"><span>Karte</span><span className="text-center">Benötigt</span><span className="text-center">Besitz</span><span className="text-center">Fehlt</span></div>
-        <div className="divide-y divide-white/6">{compared.map((card) => <div key={keyOf(card.set, card.number)} className={`grid grid-cols-[minmax(0,1fr)_64px_64px_64px] items-center gap-2 px-4 py-3 ${card.missing ? 'bg-rose-400/[.035]' : ''}`}><div className="min-w-0"><p className="truncate text-sm font-semibold">{card.name}</p><p className="text-xs text-slate-500">{card.set} {card.number} · {card.board === 'leader' ? 'Anführer' : card.board === 'base' ? 'Basis' : card.board === 'sideboard' ? 'Sideboard' : 'Hauptdeck'}</p></div><span className="text-center text-sm font-bold tabular-nums">{card.count}</span><span className="text-center text-sm tabular-nums text-slate-300">{card.owned}</span><span className={`mx-auto grid size-8 place-items-center rounded-full text-sm font-bold tabular-nums ${card.missing ? 'bg-rose-400/15 text-rose-300' : 'bg-emerald-400/12 text-emerald-300'}`}>{card.missing || <Check className="size-4" />}</span></div>)}</div>
+        <div className="divide-y divide-white/6">{compared.map((card) => <div key={keyOf(card.set, card.number)} className={`grid grid-cols-[minmax(0,1fr)_64px_64px_64px] items-center gap-2 px-4 py-3 ${card.missing ? 'bg-rose-400/[.035]' : ''}`}><div className="min-w-0"><p className="truncate text-sm font-semibold">{card.name}</p><p className="text-xs text-slate-500">{card.set} {card.number} · {card.board === 'leader' ? 'Anführer' : card.board === 'base' ? 'Basis' : card.board === 'sideboard' ? 'Sideboard' : 'Hauptdeck'}</p></div><Input type="number" min={0} max={card.board === 'leader' || card.board === 'base' ? 1 : 3} value={card.count} onChange={(event) => setDeck({ ...deck, cards: deck.cards.map(c => keyOf(c.set, c.number) === keyOf(card.set, card.number) ? { ...c, count: Math.max(0, Number(event.target.value)) } : c).filter(c => c.count > 0) })} className="h-8 px-2 text-center" /><span className="text-center text-sm tabular-nums text-slate-300">{card.owned}</span><span className={`mx-auto grid size-8 place-items-center rounded-full text-sm font-bold tabular-nums ${card.missing ? 'bg-rose-400/15 text-rose-300' : 'bg-emerald-400/12 text-emerald-300'}`}>{card.missing || <Check className="size-4" />}</span></div>)}</div>
       </div>
       <p className="flex items-center gap-1.5 text-xs text-slate-500"><ExternalLink className="size-3" />Deckdaten werden direkt aus dem öffentlichen Link von {deck.source} geladen.</p>
     </div>}
@@ -104,6 +110,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const [view, setView] = useState<AppView>('collection');
   const [deckUrl, setDeckUrl] = useState('');
   const [deck, setDeck] = useState<ImportedDeck | null>(null);
+  const [savedDecks, setSavedDecks] = useState<ImportedDeck[]>([]);
   const [deckLoading, setDeckLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const inventoryRef = useRef(inventory);
@@ -155,6 +162,11 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    void fetch('/api/decks').then((response) => response.ok ? response.json() : null).then((data) => setSavedDecks(data?.decks ?? []));
+  }, [user]);
+
   const shown = useMemo(() => {
     const matches = catalog.filter((card) => {
     const item = inventory[keyOf(card.set, card.number)];
@@ -202,7 +214,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
       const response = await fetch('/api/decks/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: deckUrl }) });
       const data = await response.json() as ImportedDeck & { error?: string };
       if (!response.ok) throw new Error(data.error || 'Deck konnte nicht geladen werden');
-      setDeck(data);
+      setDeck({ ...data, sourceUrl: deckUrl });
       setNotice(`${data.name} wurde geladen`);
     } catch (error) {
       setDeck(null);
@@ -210,6 +222,20 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     } finally {
       setDeckLoading(false);
     }
+  }
+
+  async function saveDeck() {
+    if (!deck || !user) return;
+    const response = await fetch('/api/decks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(deck) });
+    const data = await response.json();
+    if (!response.ok) { setNotice(data.error || 'Deck konnte nicht gespeichert werden'); return; }
+    setDeck(data.deck); setSavedDecks((items) => [data.deck, ...items.filter((item) => item.id !== data.deck.id)]); setNotice('Deck gespeichert');
+  }
+
+  async function deleteDeck(id: string) {
+    const response = await fetch(`/api/decks?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) { setNotice('Deck konnte nicht gelöscht werden'); return; }
+    setSavedDecks((items) => items.filter((item) => item.id !== id)); setDeck(null); setNotice('Deck gelöscht');
   }
 
   async function importCollection(file?: File) {
@@ -260,7 +286,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
         <section className="rounded-2xl border border-white/8 bg-card p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Deine Sammlung</p><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-3xl font-bold">{copies}</p><p className="text-xs text-slate-400">Exemplare</p></div><div><p className="text-3xl font-bold">{ownedCards.length}</p><p className="text-xs text-slate-400">Karten</p></div></div><div className="mt-5 border-t border-white/8 pt-4"><p className="text-2xl font-bold text-emerald-300">{euro.format(selectedSetValue)}</p><p className="text-xs text-slate-400">{setCode === 'ALL' ? 'Cardmarket-Wert der gesamten Sammlung' : 'Cardmarket-Wert im gewählten Set'}</p></div><div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/8"><div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200" style={{ width: `${catalogTotal ? Math.min(100, ownedCards.length / catalogTotal * 100) : 0}%` }} /></div><p className="mt-2 text-xs text-slate-500">{catalogTotal.toLocaleString('de-DE')} Katalogeinträge</p></section>
         <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Bereiche">
           <button onClick={() => setView('collection')} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${view === 'collection' ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Layers3 className="size-4" />Kartensammlung</button>
-          <button onClick={() => setView('decks')} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${view === 'decks' ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Link2 className="size-4" />Deck prüfen</button>
+          <button onClick={() => setView('decks')} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${view === 'decks' ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Link2 className="size-4" />Meine Decks</button>
         </nav>
         {view === 'collection' && <nav className="space-y-1 rounded-2xl border border-white/8 bg-card p-2" aria-label="Sammlungsfilter">{([['all', 'Alle Karten'], ['valuable', 'Meine wertvollsten'], ['owned', 'In Sammlung'], ['missing', 'Fehlende Karten']] as [CatalogFilter, string][]).map(([value, label]) => <button key={value} onClick={() => { setFilter(value); setVisible(PAGE_SIZE); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${filter === value ? 'bg-amber-300/12 font-semibold text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>{value === 'all' ? <Archive className="size-4" /> : value === 'valuable' ? <Trophy className="size-4" /> : value === 'owned' ? <Sparkles className="size-4" /> : <Layers3 className="size-4" />}{label}</button>)}</nav>}
         <p className="px-2 text-[11px] leading-relaxed text-slate-600">Inoffizielles Fanprojekt. Kartendaten: SWU-DB. Kartenbilder © Fantasy Flight Games / Lucasfilm.</p>
@@ -288,7 +314,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
         })}</div>}
         {!loading && shown.length === 0 && <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-slate-400">Keine passende Karte gefunden.</div>}
         {!loading && visible < shown.length && <div className="mt-6 text-center"><Button variant="outline" onClick={() => setVisible((count) => count + PAGE_SIZE)} className="border-white/10 bg-white/5">Mehr Karten anzeigen ({shown.length - visible})</Button></div>}
-      </section> : <DeckChecker user={user} deckUrl={deckUrl} setDeckUrl={setDeckUrl} deck={deck} loading={deckLoading} inventory={inventory} onImport={() => void importDeck()} />}
+      </section> : <DeckChecker user={user} deckUrl={deckUrl} setDeckUrl={setDeckUrl} deck={deck} setDeck={setDeck} savedDecks={savedDecks} loading={deckLoading} inventory={inventory} onImport={() => void importDeck()} onSave={() => void saveDeck()} onDelete={(id) => void deleteDeck(id)} />}
     </div>
     {notice && <div role="status" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 shadow-xl">{notice}</div>}
   </main>;
