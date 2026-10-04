@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 type MarketPrices = { regular: number | null; foil: number | null; hyperspace: number | null; hyperfoil: number | null; showcase: number | null };
 type CatalogCard = { id: string; set: string; number: string; name: string; subtitle: string; type: string; rarity: string; image: string; backImage: string | null; aspects: string[]; showcaseImage: string | null; showcaseNumber: string | null; prices: MarketPrices };
 type Inventory = { id?: number; name: string; subtitle: string; set: string; number: string; rarity: string; color: string; regular: number; foil: number; hyperspace: number; hyperfoil: number; showcase: number };
-type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null };
+type SetInfo = { code: string; name: string; cardCount: number; releaseDate: string | null; parent: string | null; isBase: boolean };
 type Variant = 'regular' | 'foil' | 'hyperspace' | 'hyperfoil' | 'showcase';
 type Language = 'de' | 'en';
 type CatalogFilter = 'all' | 'owned' | 'missing' | 'valuable';
@@ -126,7 +126,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
       const nextSets = data.sets ?? [];
       setSets(nextSets);
       setCatalogTotal(data.totalCards ?? 0);
-      setSetCode(nextSets.find((set: SetInfo) => set.code === 'ASH')?.code ?? nextSets[0]?.code ?? 'SOR');
+      setSetCode(nextSets.find((set: SetInfo) => set.isBase)?.code ?? nextSets[0]?.code ?? 'SOR');
     }).catch(() => setNotice('Sets konnten nicht geladen werden'));
   }, []);
 
