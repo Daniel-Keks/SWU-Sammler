@@ -13,6 +13,21 @@ type SourceCard = {
   Aspects?: string[];
 };
 
+type BulkCard = {
+  setCode: string;
+  cardNumber: string;
+  name: string;
+  subtitle?: string | null;
+  type?: string;
+  rarity?: string;
+  variantType?: string;
+  frontImageUrl?: string;
+  backImageUrl?: string | null;
+  aspects?: string[];
+};
+
+type BulkExport = { cards?: BulkCard[] };
+
 type OfficialCard = {
   attributes: {
     title: string;
@@ -38,6 +53,68 @@ function officialImage(card?: OfficialCard, side: 'artFront' | 'artBack' = 'artF
   return art?.formats?.card?.url ?? art?.url ?? null;
 }
 
+function bulkVariant(variant = '') {
+  if (variant === 'Standard') return 'Normal';
+  if (variant === 'Standard Prestige') return 'Prestige';
+  if (variant === 'Foil Prestige') return 'Prestige Foil';
+  if (variant === 'Serialized Prestige') return 'Serialized';
+  return variant;
+}
+
+function sourceFromBulk(card: BulkCard): SourceCard {
+  return {
+    Set: card.setCode,
+    Number: card.cardNumber,
+    Name: card.name,
+    Subtitle: card.subtitle ?? undefined,
+    Type: card.type,
+    Rarity: card.rarity,
+    VariantType: bulkVariant(card.variantType),
+    FrontArt: card.frontImageUrl,
+    BackArt: card.backImageUrl ?? undefined,
+    Aspects: card.aspects,
+  };
+}
+
+function buildBulkCatalog(source: SourceCard[]) {
+  const variants = (kind: string) => new Map(source.filter((card) => card.VariantType === kind).map((card) => [`${card.Set}|${card.Name}|${card.Subtitle ?? ''}`, card]));
+  const showcases = variants('Showcase');
+  const prestige = variants('Prestige');
+  const prestigeFoil = variants('Prestige Foil');
+  const serialized = variants('Serialized');
+  const setsWithStandardCards = new Set(source.filter((card) => card.VariantType === 'Normal' || card.VariantType === 'Standard').map((card) => card.Set));
+  const preferred = new Map<string, SourceCard>();
+  for (const card of source) {
+    if (setsWithStandardCards.has(card.Set) && card.VariantType !== 'Normal' && card.VariantType !== 'Standard') continue;
+    const key = `${card.Set}|${card.Number}`;
+    const current = preferred.get(key);
+    const isStandard = card.VariantType === 'Normal' || card.VariantType === 'Standard';
+    const currentIsStandard = current?.VariantType === 'Normal' || current?.VariantType === 'Standard';
+    if (!current || (isStandard && !currentIsStandard)) preferred.set(key, card);
+  }
+  return [...preferred.values()].map((card) => {
+    const key = `${card.Set}|${card.Name}|${card.Subtitle ?? ''}`;
+    return {
+      id: `${card.Set}_${card.Number}`,
+      set: card.Set,
+      number: card.Number,
+      name: card.Name,
+      subtitle: card.Subtitle ?? '',
+      type: card.Type ?? '',
+      rarity: card.Rarity ?? 'Unbekannt',
+      image: card.FrontArt ?? `https://api.swu-db.com/cards/${card.Set.toLowerCase()}/${card.Number}?format=image`,
+      backImage: card.BackArt ?? null,
+      aspects: card.Aspects ?? [],
+      showcaseImage: showcases.get(key)?.FrontArt ?? null,
+      showcaseNumber: showcases.get(key)?.Number ?? null,
+      prestigeImage: prestige.get(key)?.FrontArt ?? null,
+      prestigeFoilImage: prestigeFoil.get(key)?.FrontArt ?? null,
+      serializedImage: serialized.get(key)?.FrontArt ?? null,
+      prices: emptyMarketPrices(),
+    };
+  }).sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }));
+}
+
 async function fetchOfficialCards(set: string, language: 'de' | 'en', filter: string) {
   const base = new URL('https://admin.starwarsunlimited.com/api/card-list');
   base.searchParams.set('locale', language);
@@ -61,12 +138,27 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const set = url.searchParams.get('set')?.toUpperCase();
   const language = url.searchParams.get('lang') === 'en' ? 'en' : 'de';
-  if (!set || !/^[A-Z0-9]{2,8}$/.test(set)) return Response.json({ error: 'Ungültiger Set-Code' }, { status: 400 });
+  if (!set || !/^(ALL|[A-Z0-9]{2,8})$/.test(set)) return Response.json({ error: 'Ungültiger Set-Code' }, { status: 400 });
+
+  if (set === 'ALL') {
+    const bulkResponse = await fetch('https://api.swuapi.com/export/all', { headers: { accept: 'application/json' }, next: { revalidate } });
+    if (!bulkResponse.ok) return Response.json({ error: 'Karten konnten nicht geladen werden' }, { status: 502 });
+    const bulk = await bulkResponse.json() as BulkExport;
+    const cards = buildBulkCatalog((bulk.cards ?? []).map(sourceFromBulk));
+    return Response.json({ cards, set, setName: 'Alle Sets', language, count: cards.length, marketUpdatedAt: null, source: 'SWU API' });
+  }
 
   const response = await fetch(`https://api.swu-db.com/cards/${set.toLowerCase()}`, { headers: { accept: 'application/json' }, next: { revalidate } });
-  if (!response.ok) return Response.json({ error: 'Karten konnten nicht geladen werden' }, { status: 502 });
-  const payload = await response.json() as { data?: SourceCard[] } | SourceCard[];
-  const source = Array.isArray(payload) ? payload : payload.data ?? [];
+  let source: SourceCard[] = [];
+  if (response.ok) {
+    const payload = await response.json() as { data?: SourceCard[] } | SourceCard[];
+    source = Array.isArray(payload) ? payload : payload.data ?? [];
+  } else {
+    const fallback = await fetch('https://api.swuapi.com/export/all', { headers: { accept: 'application/json' }, next: { revalidate } });
+    if (!fallback.ok) return Response.json({ error: 'Karten konnten nicht geladen werden' }, { status: 502 });
+    const payload = await fallback.json() as BulkExport;
+    source = (payload.cards ?? []).filter((card) => card.setCode === set).map(sourceFromBulk);
+  }
   const standardCards = source.filter((card) => card.VariantType === 'Normal' || card.VariantType === 'Standard');
   const catalogSource = standardCards.length ? standardCards : source;
   const swudbShowcaseByName = new Map(source.filter((card) => card.VariantType === 'Showcase').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));

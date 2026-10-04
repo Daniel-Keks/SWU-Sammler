@@ -142,7 +142,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     if (setCode === 'ALL' && sets.length === 0) return;
     const controller = new AbortController();
     setLoading(true); setVisible(PAGE_SIZE);
-    const codes = setCode === 'ALL' ? sets.map((set) => set.code) : [setCode];
+    const codes = [setCode];
     const loadCatalog = async () => {
       const results: Array<{ cards?: CatalogCard[]; setName?: string; marketUpdatedAt?: string | null }> = [];
       let failedSets = 0;
@@ -159,7 +159,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
       setCatalog(results.flatMap((data) => data.cards ?? []));
       setLocalizedSetName(setCode === 'ALL' ? 'Alle Sets' : results[0]?.setName ?? '');
       setMarketUpdatedAt(results.find((data) => data.marketUpdatedAt)?.marketUpdatedAt ?? null);
-      if (failedSets > 0) setNotice(failedSets === 1 ? '1 derzeit nicht verfügbares Set wurde übersprungen' : `${failedSets} derzeit nicht verfügbare Sets wurden übersprungen`);
+      if (failedSets > 0) setNotice('Ein Teil des Katalogs ist derzeit nicht verfügbar');
     };
     void loadCatalog().catch((error) => { if (error instanceof Error && error.name !== 'AbortError') setNotice('Karten konnten nicht geladen werden'); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
