@@ -29,6 +29,13 @@
       "when": 1788428021432,
       "tag": "0003_tough_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791150584418,
+      "tag": "0004_flimsy_the_hunter",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,9 @@ export const collectionEntries = sqliteTable('collection_entries', {
   hyperspace: integer('hyperspace').notNull().default(0),
   hyperfoil: integer('hyperfoil').notNull().default(0),
   showcase: integer('showcase').notNull().default(0),
+  prestige: integer('prestige').notNull().default(0),
+  prestigeFoil: integer('prestige_foil').notNull().default(0),
+  serialized: integer('serialized').notNull().default(0),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
   uniqueIndex('idx_collection_user_set_number').on(table.userId, table.setName, table.cardNumber),

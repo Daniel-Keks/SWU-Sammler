@@ -18,9 +18,12 @@ export type MarketPrices = {
   hyperspace: number | null;
   hyperfoil: number | null;
   showcase: number | null;
+  prestige: number | null;
+  prestigeFoil: number | null;
+  serialized: number | null;
 };
 
-const EMPTY: MarketPrices = { regular: null, foil: null, hyperspace: null, hyperfoil: null, showcase: null };
+const EMPTY: MarketPrices = { regular: null, foil: null, hyperspace: null, hyperfoil: null, showcase: null, prestige: null, prestigeFoil: null, serialized: null };
 const MARKET_REVALIDATE = 86400;
 const cardName = (card: CatalogSource) => `${card.Name}${card.Subtitle ? `, ${card.Subtitle}` : ''}`;
 
@@ -76,6 +79,9 @@ export async function getCardmarketPrices(cards: CatalogSource[]) {
       hyperspace: hyperspacePrice?.trend ?? null,
       hyperfoil: isLeader ? null : hyperspacePrice?.['trend-foil'] || null,
       showcase: showcasePrice ? Math.max(showcasePrice.trend ?? 0, showcasePrice['trend-foil'] ?? 0) || null : null,
+      prestige: null,
+      prestigeFoil: null,
+      serialized: null,
     });
   }
   return { byName, updatedAt: pricesPayload.createdAt ?? null };

@@ -70,6 +70,9 @@ export async function GET(request: Request) {
   const standardCards = source.filter((card) => card.VariantType === 'Normal' || card.VariantType === 'Standard');
   const catalogSource = standardCards.length ? standardCards : source;
   const swudbShowcaseByName = new Map(source.filter((card) => card.VariantType === 'Showcase').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));
+  const swudbPrestigeByName = new Map(source.filter((card) => card.VariantType === 'Prestige').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));
+  const swudbPrestigeFoilByName = new Map(source.filter((card) => card.VariantType === 'Prestige Foil').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));
+  const swudbSerializedByName = new Map(source.filter((card) => card.VariantType === 'Serialized').map((card) => [`${card.Name}|${card.Subtitle ?? ''}`, card]));
 
   let officialStandard: OfficialCard[] = [];
   let officialShowcases: OfficialCard[] = [];
@@ -105,6 +108,9 @@ export async function GET(request: Request) {
     const localized = officialByNumber.get(numberKey);
     const localizedShowcase = officialShowcaseByBaseNumber.get(numberKey);
     const swudbShowcase = swudbShowcaseByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
+    const swudbPrestige = swudbPrestigeByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
+    const swudbPrestigeFoil = swudbPrestigeFoilByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
+    const swudbSerialized = swudbSerializedByName.get(`${card.Name}|${card.Subtitle ?? ''}`);
     const prices = market.byName.get(`${card.Name}${card.Subtitle ? `, ${card.Subtitle}` : ''}`) ?? emptyMarketPrices();
     return {
       id: `${card.Set}_${card.Number}`,
@@ -119,6 +125,9 @@ export async function GET(request: Request) {
       aspects: card.Aspects ?? [],
       showcaseImage: officialImage(localizedShowcase) ?? swudbShowcase?.FrontArt ?? null,
       showcaseNumber: localizedShowcase ? String(localizedShowcase.attributes.cardNumber) : swudbShowcase?.Number ?? null,
+      prestigeImage: swudbPrestige?.FrontArt ?? null,
+      prestigeFoilImage: swudbPrestigeFoil?.FrontArt ?? null,
+      serializedImage: swudbSerialized?.FrontArt ?? null,
       prices,
     };
   }).sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
