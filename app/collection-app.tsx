@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, Copy, Download, ExternalLink, ImageOff, Layers3, Link2, Minus, Plus, Save, Search, Sparkles, Trash2, Trophy, Upload, X } from 'lucide-react';
+import { Archive, Check, Copy, Download, ExternalLink, ImageOff, Layers3, Link2, LogOut, Minus, Plus, Save, Search, Sparkles, Trash2, Trophy, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -115,6 +115,11 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
   const fileRef = useRef<HTMLInputElement>(null);
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
+
+  async function signOut() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/login';
+  }
 
   useEffect(() => {
     void fetch('/api/catalog/sets').then((response) => response.json()).then((data) => {
@@ -277,7 +282,7 @@ export default function CollectionApp({ user }: { user: { name: string; email: s
     <header className="sticky top-0 z-30 border-b border-white/8 bg-[#090b10]/92 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1500px] items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl border border-amber-300/25 bg-amber-300/10 text-amber-300"><Layers3 /></div><div><p className="text-lg font-bold tracking-tight">SWU Sammler</p><p className="text-xs text-slate-400">Vollständiger Kartenkatalog</p></div></div>
-        <div className="flex items-center gap-1 sm:gap-2"><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => void importCollection(event.target.files?.[0])} />{view === 'collection' && <><Button variant="ghost" size="sm" onClick={exportCollection} className="hidden text-slate-300 md:flex"><Download /> Export</Button><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="hidden border-white/10 bg-white/5 text-slate-200 md:flex"><Upload /> Import</Button></>}{user ? <div className="ml-1 grid size-9 place-items-center rounded-full bg-amber-300 font-bold text-slate-950" title={user.email}>{user.name.charAt(0).toUpperCase()}</div> : <a href="/signin-with-chatgpt?return_to=%2F" target="_top" className="rounded-lg bg-amber-300 px-3 py-2 text-sm font-semibold text-slate-950">Anmelden</a>}</div>
+        <div className="flex items-center gap-1 sm:gap-2"><input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={(event) => void importCollection(event.target.files?.[0])} />{view === 'collection' && <><Button variant="ghost" size="sm" onClick={exportCollection} className="hidden text-slate-300 md:flex"><Download /> Export</Button><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="hidden border-white/10 bg-white/5 text-slate-200 md:flex"><Upload /> Import</Button></>}{user && <><div className="ml-1 grid size-9 place-items-center rounded-full bg-amber-300 font-bold text-slate-950" title={user.email}>{user.name.charAt(0).toUpperCase()}</div><Button variant="ghost" size="icon-sm" onClick={() => void signOut()} title="Abmelden" aria-label="Abmelden" className="text-slate-400 hover:text-white"><LogOut /></Button></>}</div>
       </div>
     </header>
 

@@ -1,9 +1,9 @@
 import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { getAppUser } from '@/app/auth';
 
 export const dynamic = 'force-dynamic';
 
-async function ownerId() { return (await getChatGPTUser())?.userId ?? null; }
+async function ownerId() { return (await getAppUser())?.userId ?? null; }
 
 export async function GET() {
   const owner = await ownerId();
